@@ -1,0 +1,154 @@
+CySA+ Indicators of Compromise: Indicators of compromise (IOCs) are forensic data found in system log entries or files that identify conceivably malicious activity on a system or network. They assist information security and IT professionals in detecting data breaches, malware infections, or other threat activities. By monitoring IOCs, businesses can identify attacks and act quickly to stop violations from occurring or limit damages by preventing attacks in earlier stages.
+
+Indicators of compromise are vital components that lead information security and IT experts to discover malicious activity in the early stages. These unexpected actions are the red flags that indicate a possible or in-progress attack that could lead to a systems compromise. Moreover, IOCs are not constantly effortless to detect. They can be as simple as EXIF data components or astonishingly complex malicious code. Security Analysts frequently collect and classify many IOCs just to look for correlations and piece them together to analyze a potential threat or incident.
+
+1.Detection Overview: If security teams discover recurrence or patterns of specific IOCs, they can update their security tools and policies to protect against future attacks. It is highly recommended to perform standard checks on the computers and networks and analyze if there is any running application that is not authorized or any rogue device on the infrastructure that can be potentially sniffing on the traffic. In this exercise, we will look for the following indicators of compromise:
+
+● Suspicious activity in administrator or privileged accounts.
+
+● Unknown files, applications, and processes in the system.
+
+● Dubious log-ins, access, and other network activities that indicate probing or brute force attacks.
+
+● Anomalous spikes of requests.
+
+● Tampered files.
+
+● Large amounts of compressed files and data are found in locations where they shouldn’t be.
+
+After accessing the system, there is a list of commands that we can apply to see if everything is working as it is supposed to. We start by verifying if access logs are changed or any other unauthorized access has happened. These steps depend on the running applications and operating system. It is always a good starting point to review /var/log directory; if we want to check for access, we can investigate the auth.log file and validate all successful logins.
+
+While using tools like netstat, we can investigate traffic that traverses in unusually used ports. Depending on the type of the attack, we always should check for inbound and outbound traffic. If an attacker uses malware that opens a port and listens for a connection, we can list all the listening ports while reverse engineering the application. If an attacker uses a reverse connection, we can show all the outbound traffic and pinpoint IP addresses that are suspicious or unauthorized to have access.
+
+If the attacker manages to obtain SSH private keys and enter the system, we can use a UNIX command called who to list all authenticated connections and IP Addresses. Furthermore, if the attacker has established persistence, they will use utilities like cron jobs or task schedules to initialize the malware in the operating system's boot process. Crontab is a
+
+GNU/Linux program that provides system administrators the ability to schedule tasks and execute commands in a specified time frame. If we want to see all the running processes in the memory and look for specific applications that adversaries sometimes use, we can utilize the ps -aux command. If an application is not supposed to be running, we can use the pkill or kill command to terminate the execution.
+
+2. Persistent Backdoor: The first step will be to check if there are any compromise indicators on system files. Open a terminal window and list the content using the ls command. "ls" on its own lists all files in the current directory except for hidden files. Options can be combined (this is a general principle of Unix commands) - for example, "ls -lt" will list all files in a lengthy format, showing the newly modified ones first.
+
+Change working directory to /root. The password for user admin is admin.
+
+sudo su
+cd /root
+The files listed all seem to be usual system files.
+
+ls ‑al 
+
+3.Attacking Perspective: Attackers try to be stealthy when creating files on target machines; hence, it is a good practice to go through several directories when checking for any malicious-looking file. The command shown below lists all content in the root directory of the target container.
+
+ls ‑lt /
+There are several files and directories in this path that are user-created and not default items.
+However, there is one that seems a bit odd. The result shows a shell script named backdoor.sh.
+
+Use the cat command to display the content of the script:
+
+cat /backdoor.sh
+
+4.Backdoor: It looks like the attacker is using the backdoor.sh script to open a port on the machine and execute /bin/bash. This allows the attacker to execute bash commands remotely. We can quickly identify if port 7777 is open using netstat. In computing, netstat is a command-line network utility that displays network connections for Transmission Control Protocol, routing tables, and a number of network interface and network protocol statistics. The following netstat options can be used to list all listening ports:
+
+● l (listening) - displays listening server sockets
+
+● n (numeric) - does not resolve names
+
+● t (TCP) - show TCP ports
+
+● p (programs) - display PID/Program name for sockets
+
+netstat ‑lntp
+The result shows that ncat is indeed running and opening port 7777. Considering that the -p argument provides the application process id, we can quickly terminate the process, but always be cautious of your actions. What if there is another process that is automatically executing the backdoor.sh script, and providing the attacker a persistence to the infrastructure?
+
+5.Cron: Let's continue the investigation. In the UNIX world, cron, also known as a cron job, is a time-based job scheduler. Users who set up and maintain software environments use cron to schedule jobs to run periodically at fixed times, dates, or intervals. But the same feature is exploited by adversaries to help them maintain access, sometimes for months and years, while leaving your organization open to other cybercriminals.
+
+One of the easiest ways to detect active cron jobs is by checking which processes are active and running. The ps command serves this purpose. The grep command can be used to filter the output of other commands based on search strings. In this case, it filters the ps output and shows only cron related processes.
+
+ps ‑aux | grep cron
+It looks like we have a cron running under the user root. To verify if there is any job, we can use the crontab application. The -l option will list all the running jobs for that user.
+
+crontab ‑l
+The five asterisks mean that the cron job is being executed every minute of every day. An explanation of job definitions is shown below.
+It looks like our hypothesis was right; the attacker has managed to perform persistence by creating a scheduled task that runs every minute and executes a script that will make sure that port 7777 is always open.
+
+6.Data Exfiltration: From the previous network status shown using the netstat command, we know that there is no established connection on port 7777, meaning that the port is accessible, but there are no active connections. Since the backdoor is not being used, it is safe to assume that the attacker is exploiting the systems through other compromised components.
+
+The Secure Shell Protocol (SSH) is often used for administration purposes. The w command shows logged users and will list any remote connections on the SSH protocol if there are any.
+
+w
+Since it cannot be predicted when an attacker will decide to connect to the target, the system should be monitored continuously. The ps command provides a snapshot of the running processes at the moment when the command is executed. If the attacker happens to connect to SSH before or after the ps command is executed, the connection will not be detected.
+
+7.Watch: The watch command executes a program periodically. It can be combined with any other Linux command. In this case, it will be used to run ps every second.
+
+watch ‑n1 ps aux
+After monitoring the results of ps -aux for a few seconds, the scp -f /home/admin/backup.zip process belonging to user admin will be spotted.
+
+To exit the watch command screen, use Control+C. Most of the processes shown have already been identified or are normal system processes. The SCP process, however, is suspicious. The Secure Copy Protocol (SCP) is a means of securely transferring computer files between a local host and a remote host or between two remote hosts. It is based on the Secure Shell (SSH) protocol. This process is user-initiated, meaning a system user must run the scp command on the terminal to start a secure copy process. Since we have not run any command of the sort, we can assume that an unknown party has gained access to our device and is using scp to exfiltrate data.
+
+Exit the "watch" command before proceeding to step 8 by using the Ctrl+C key combination.
+
+8. iftop: We can verify that by analyzing the network traffic using iftop, a free software command-line system monitoring tool that produces a frequently updated list of network connections.
+
+iftop ‑n ‑i eth0
+It looks like a host is persistently connecting to our system. Because the scp command uses the SSH protocol for authentication, the attacker may have compromised the SSH protocol and added his public key for login to the system.
+
+Exit the "iftop" command before proceeding to step 9 by using the Ctrl+C key combination.
+
+9.SSH Key: An SSH key is an access credential in the SSH protocol. Its function is similar to that of usernames and passwords, but the keys are primarily used for automated processes and for implementing single sign-on by system administrators and power users.
+
+ls /home/admin/.ssh/
+We can use the ls command followed by the directory's full path, but it looks like there is no file called authorized_keys.
+
+The SSH directory listed above is the default directory, and it is often checked when adding or removing keys. Default locations can easily give away the fact that there is an intruder in the system; therefore, attackers will try to use less commonly checked directories for their operations. Like most of the applications today, SSH has its config file that allows advanced users to customize how the application runs or provides additional features that manually need to be enabled.
+
+nano /etc/ssh/sshd_config
+The authorized_keys line in the sshd_config file determines the path that contains the keys of all authorized users. These users can authenticate themselves to SSH remotely, gaining access to the target container.We can detect that the line is changed, and there is a new path on the system “.secret/authorized_keys” used as authorized_keys.
+
+Exit the sshd_config file using the Ctrl+X key combination before proceeding to step 10.
+
+10.Responce: Even a minor security breach can have an immense impact. Taking action immediately will empower you to contain better or reduce the impact of a cyber attack.
+
+Important Note: Many countries have laws that require businesses to notify customers if there is a chance their information was stolen, disclosed, or otherwise lost. Familiarize yourself with foreign, state, and local laws regarding notification obligations and include that information in your response plan.
+
+Even if a cyber incident seems to be under control, remain observant. Many attackers return and attempt to regain access to networks that they previously compromised. It is possible that, despite your best efforts, a hacker could again find a way into your system.
+
+After we have detected the incident, we need to respond. Following the previous investigation, we know that there is a cron job running under the root user, and it is executing a backdoor.sh file that opens port 7777.
+
+Run the crontab -e command and remove the "* * * * * root sh /backdoor.sh 2>&1" line that is invoking the backdoor. Make sure to save the changes before exiting.
+
+crontab ‑e
+You can use both nano and gedit to edit the file’s content.
+
+11.Removal: pkill ncat
+The next step is to delete the backdoor. sh that allows the attacker remote access.
+
+rm /backdoor.sh
+Make sure the backdoor is removed
+
+12. SSH Protocol: Furthermore, to ensure that the attacker has no access to the SSH protocol, temporarily stop the service.
+
+service ssh stop
+The default SSH config file only contains the .ssh/authorized_keys path. Remove the .secret/authorized_keys path added to the /etc/ssh/sshd_config file.
+
+You can use both nano and gedit to edit the file’s content.
+
+Delete the .secret directory containing attackers' authentication keys.
+
+rm ‑rf /home/admin/.secret/
+Now we can start the SSH service.
+
+service ssh start
+Run the watch -n1 ps -aux command again and monitor the system for a few seconds to make sure the scp process is terminated.
+
+watch ‑n1 ps ‑aux
+
+13.Report: Cyber incidents can have serious outcomes. The theft of private, financial, or other sensitive data and cyberattacks that damage computer systems are capable of causing permanent harm to anyone engaged in personal or commercial online transactions. Such risks are frequently faced by businesses, consumers, and all other users of the Internet. A cyber incident is an event that could endanger the confidentiality, integrity, or availability of digital information or information systems. Accordingly, you should report all cyber incidents that may:
+
+● Result in a substantial loss of data, system availability, or control of systems.
+
+● Impact a large number of victims.
+
+● Indicate unauthorized access to, or malicious software present on, critical information technology systems.
+
+● Affect essential infrastructure or core government functions.
+
+● Impact national security, economic security, or public health and safety.
+
+In the U.S, the private sector entities experiencing cyber incidents are encouraged to report a cyber incident to the local field offices of federal law enforcement agencies, their sector-specific agency, and any of the federal agencies. The agency receiving the initial report will coordinate with other relevant national stakeholders in responding to the incident. If the affected entity is obligated by law or contract to report a cyber incident, the entity should comply with that obligation, in addition, to voluntarily reporting the incident to an appropriate federal point of contact.
